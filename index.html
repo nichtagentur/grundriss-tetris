@@ -1,0 +1,1530 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Grundriss Tetris — Wiener Altbau</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg-0: #0e1014;
+    --bg-1: #161a22;
+    --bg-2: #1f2530;
+    --ink: #e8ecf2;
+    --ink-dim: #98a2b3;
+    --accent: #d4a574;
+    --accent-2: #e8c8a0;
+    --good: #6ee7b7;
+    --bad: #fb7185;
+    --wall: #2a2f3a;
+    --floor: #f3e7d3;
+    --floor-dark: #e6d5b8;
+    --grout: #d9c7a7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #2a1f15 0%, transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, #15212a 0%, transparent 55%),
+      linear-gradient(180deg, var(--bg-0), var(--bg-1));
+    color: var(--ink);
+    font-family: "Inter", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 18px 24px;
+    gap: 14px;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 18px;
+  }
+  .brand {
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  .brand h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    background: linear-gradient(90deg, var(--accent-2), #f6e6cf);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+  }
+  .brand .sub {
+    color: var(--ink-dim);
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .hud {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .stat {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 8px 14px;
+    min-width: 92px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+  }
+  .stat .lbl { color: var(--ink-dim); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; }
+  .stat .val { font-size: 20px; font-weight: 700; color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .stat.good .val { color: var(--good); }
+  .stat.bad .val { color: var(--bad); }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+    min-height: 0;
+  }
+  .panel {
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 18px;
+    padding: 14px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative;
+    overflow: hidden;
+  }
+  .panel.board { padding: 10px; }
+  #board {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    cursor: grab;
+  }
+  #board.dragging { cursor: grabbing; }
+
+  .tray h2 {
+    font-size: 12px; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--ink-dim); margin: 4px 4px 12px;
+  }
+  .tray-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .piece {
+    position: relative;
+    background: linear-gradient(180deg, #232a36, #1a1f29);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 10px;
+    cursor: grab;
+    transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .piece:hover {
+    transform: translateY(-2px);
+    border-color: rgba(212,165,116,0.5);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+  }
+  .piece.placed { opacity: 0.35; pointer-events: none; }
+  .piece .name { font-size: 13px; font-weight: 600; }
+  .piece .dim { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .piece .thumb {
+    height: 56px;
+    margin-top: 8px;
+    border-radius: 8px;
+    background: var(--floor);
+    position: relative;
+    overflow: hidden;
+  }
+  .piece .thumb canvas { display: block; width: 100%; height: 100%; }
+
+  footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    color: var(--ink-dim); font-size: 13px;
+  }
+  .keys { display: flex; gap: 8px; align-items: center; }
+  kbd {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink);
+  }
+  .btn {
+    background: linear-gradient(180deg, #2a3140, #1d2330);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--ink);
+    padding: 9px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.3px;
+    transition: transform 0.12s, border-color 0.2s;
+  }
+  .btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .btn.primary {
+    background: linear-gradient(180deg, var(--accent), #b8895c);
+    color: #1a120a;
+    border-color: transparent;
+  }
+
+  .toast {
+    position: absolute;
+    top: 16px; left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(20,24,32,0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s, transform 0.25s;
+    pointer-events: none;
+    z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.good { border-color: rgba(110,231,183,0.4); color: var(--good); }
+  .toast.bad { border-color: rgba(251,113,133,0.4); color: var(--bad); }
+
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(8,10,14,0.78);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .modal {
+    background: linear-gradient(180deg, #1c2230, #141823);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 28px 32px;
+    max-width: 440px;
+    text-align: center;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  }
+  .modal h2 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    background: linear-gradient(90deg, var(--accent-2), #f6e6cf);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+  }
+  .modal p { color: var(--ink-dim); margin: 0 0 18px; line-height: 1.5; font-size: 14px; }
+  .scoreline {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px; margin: 18px 0;
+  }
+  .scoreline .stat { background: rgba(255,255,255,0.04); }
+  @media (max-width: 980px) {
+    .stage { grid-template-columns: 1fr; }
+    .tray-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  /* --- Tutorial --- */
+  .tut-overlay {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 80;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .tut-overlay.show { opacity: 1; }
+  .tut-overlay.show.modal-open { pointer-events: auto; }
+  .tut-mask {
+    position: absolute; inset: 0;
+    background: rgba(8,10,14,0.55);
+    -webkit-mask-image: var(--mask, none);
+            mask-image: var(--mask, none);
+    transition: background 0.3s;
+  }
+  .tut-spot {
+    position: absolute;
+    border: 2px solid var(--accent-2);
+    border-radius: 14px;
+    box-shadow: 0 0 0 4px rgba(232,200,160,0.15), 0 0 40px rgba(232,200,160,0.35);
+    pointer-events: none;
+    transition: top 0.35s cubic-bezier(.2,.7,.2,1), left 0.35s cubic-bezier(.2,.7,.2,1),
+                width 0.35s cubic-bezier(.2,.7,.2,1), height 0.35s cubic-bezier(.2,.7,.2,1),
+                opacity 0.25s;
+    animation: tut-pulse 2s ease-in-out infinite;
+  }
+  @keyframes tut-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(232,200,160,0.15), 0 0 40px rgba(232,200,160,0.35); }
+    50%      { box-shadow: 0 0 0 8px rgba(232,200,160,0.25), 0 0 60px rgba(232,200,160,0.55); }
+  }
+  .tut-bubble {
+    position: absolute;
+    background: linear-gradient(180deg, #1c2230, #141823);
+    border: 1px solid rgba(232,200,160,0.35);
+    border-radius: 14px;
+    padding: 16px 18px;
+    width: 320px;
+    color: var(--ink);
+    box-shadow: 0 30px 60px rgba(0,0,0,0.55);
+    pointer-events: auto;
+    transition: top 0.35s cubic-bezier(.2,.7,.2,1), left 0.35s cubic-bezier(.2,.7,.2,1),
+                opacity 0.25s;
+  }
+  .tut-bubble .step {
+    color: var(--accent-2);
+    font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase;
+    margin-bottom: 6px; font-weight: 700;
+  }
+  .tut-bubble h3 { margin: 0 0 8px; font-size: 17px; font-weight: 700; }
+  .tut-bubble p { margin: 0 0 14px; font-size: 13px; line-height: 1.55; color: var(--ink-dim); }
+  .tut-bubble .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .tut-bubble .progress {
+    display: flex; gap: 4px;
+  }
+  .tut-bubble .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+  }
+  .tut-bubble .dot.active { background: var(--accent-2); }
+  .tut-bubble .dot.done { background: var(--good); }
+  .tut-bubble .arrow {
+    position: absolute; width: 14px; height: 14px;
+    background: linear-gradient(135deg, #1c2230, #141823);
+    border: 1px solid rgba(232,200,160,0.35);
+    border-right: none; border-bottom: none;
+    transform: rotate(-45deg);
+  }
+  .tut-bubble.arrow-left .arrow { left: -8px; top: 24px; }
+  .tut-bubble.arrow-right .arrow { right: -8px; top: 24px; transform: rotate(135deg); }
+  .tut-bubble.arrow-top .arrow { top: -8px; left: 24px; transform: rotate(45deg); }
+  .tut-bubble.arrow-bottom .arrow { bottom: -8px; left: 24px; transform: rotate(-135deg); }
+  .tut-bubble .btn-row { display: flex; gap: 8px; }
+  .tut-bubble .btn-skip {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--ink-dim);
+    padding: 7px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .tut-bubble .btn-skip:hover { color: var(--ink); border-color: rgba(255,255,255,0.25); }
+  .tut-bubble .btn-next {
+    background: linear-gradient(180deg, var(--accent), #b8895c);
+    color: #1a120a;
+    border: none;
+    padding: 7px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px; font-weight: 700;
+  }
+  .tut-bubble .hint {
+    font-size: 11px; color: var(--good);
+    margin-top: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .tut-bubble .hint::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--good);
+    animation: tut-pulse-dot 1.2s ease-in-out infinite;
+  }
+  @keyframes tut-pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Welcome modal — sits on the main overlay */
+  .welcome { max-width: 460px; }
+  .welcome h2 { font-size: 32px; }
+  .welcome .opts {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px;
+  }
+  .welcome .opt {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.12s;
+  }
+  .welcome .opt:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .welcome .opt h4 { margin: 0 0 4px; font-size: 14px; }
+  .welcome .opt p { margin: 0; font-size: 12px; color: var(--ink-dim); line-height: 1.4; }
+  .welcome .opt.primary { background: linear-gradient(180deg, rgba(212,165,116,0.18), rgba(212,165,116,0.08)); border-color: rgba(212,165,116,0.5); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1>Grundriss Tetris</h1>
+      <span class="sub">Wiener Altbau · 78 m²</span>
+    </div>
+    <div class="hud">
+      <div class="stat"><div class="lbl">Coverage</div><div class="val" id="hud-cov">0%</div></div>
+      <div class="stat" id="hud-clash-stat"><div class="lbl">Konflikte</div><div class="val" id="hud-clash">0</div></div>
+      <div class="stat good"><div class="lbl">Score</div><div class="val" id="hud-score">0</div></div>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="panel board">
+      <div class="toast" id="toast"></div>
+      <canvas id="board"></canvas>
+    </div>
+    <div class="panel tray">
+      <h2>Möbel</h2>
+      <div class="tray-grid" id="tray"></div>
+      <div style="margin-top:14px; color:var(--ink-dim); font-size:12px; line-height:1.55;">
+        Ziehe Möbel auf den Grundriss. <kbd>R</kbd> zum Drehen, <kbd>Entf</kbd> zum Entfernen, Doppelklick zum Aufheben.
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="keys">
+      <kbd>Drag</kbd> platzieren <span style="opacity:.4">·</span>
+      <kbd>R</kbd> rotieren <span style="opacity:.4">·</span>
+      <kbd>Esc</kbd> abbrechen
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" id="btn-tutorial">Tutorial</button>
+      <button class="btn" id="btn-reset">Zurücksetzen</button>
+      <button class="btn primary" id="btn-finish">Fertig — Bewerten</button>
+    </div>
+  </footer>
+</div>
+
+<!-- Tutorial layer -->
+<div class="tut-overlay" id="tut-overlay">
+  <div class="tut-mask" id="tut-mask"></div>
+  <div class="tut-spot" id="tut-spot" style="opacity:0"></div>
+  <div class="tut-bubble" id="tut-bubble" style="opacity:0">
+    <div class="arrow"></div>
+    <div class="step" id="tut-step">Schritt 1 / 6</div>
+    <h3 id="tut-title">Willkommen</h3>
+    <p id="tut-text">…</p>
+    <div class="hint" id="tut-hint" style="display:none">Mach das jetzt — ich warte.</div>
+    <div class="row" style="margin-top:12px">
+      <div class="progress" id="tut-dots"></div>
+      <div class="btn-row">
+        <button class="btn-skip" id="tut-skip">Tutorial überspringen</button>
+        <button class="btn-next" id="tut-next">Weiter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Welcome modal (first visit) -->
+<div class="overlay" id="welcome-overlay">
+  <div class="modal welcome">
+    <h2>Grundriss Tetris</h2>
+    <p>Möbliere einen Wiener Altbau. Achte auf Türfreiräume, richtige Räume und schöne Aufteilung.</p>
+    <div class="opts">
+      <button class="opt primary" id="welcome-tutorial">
+        <h4>Tutorial spielen</h4>
+        <p>Geführter Rundgang durch alle Mechaniken. ~2 Minuten.</p>
+      </button>
+      <button class="opt" id="welcome-skip">
+        <h4>Direkt loslegen</h4>
+        <p>Du kennst das schon. Ich vertraue dir.</p>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="mo-title">Wohnung eingerichtet</h2>
+    <p id="mo-body">Hier ist deine Bewertung.</p>
+    <div class="scoreline">
+      <div class="stat"><div class="lbl">Coverage</div><div class="val" id="mo-cov">0%</div></div>
+      <div class="stat"><div class="lbl">Konflikte</div><div class="val" id="mo-clash">0</div></div>
+      <div class="stat good"><div class="lbl">Score</div><div class="val" id="mo-score">0</div></div>
+    </div>
+    <button class="btn primary" id="mo-again">Neue Wohnung</button>
+  </div>
+</div>
+
+<script>
+// ---------- World ----------
+// Top-down floor plan. 1 grid cell = 25 cm. Apartment ~ 78 m².
+// Rooms: Wohnzimmer, Schlafzimmer, Küche, Bad, Diele.
+// Walls are drawn from segments; doors are gaps; windows are highlighted segments.
+
+const GRID = 25; // pixels per cell at 1x; canvas scales
+const COLS = 36;
+const ROWS = 26;
+
+// Rooms as rects in cells: {x,y,w,h,name}
+const rooms = [
+  { x: 1, y: 1,  w: 16, h: 11, name: "Wohnzimmer" },
+  { x: 17, y: 1, w: 12, h: 7,  name: "Küche" },
+  { x: 17, y: 8, w: 12, h: 4,  name: "Diele" },
+  { x: 1, y: 12, w: 14, h: 13, name: "Schlafzimmer" },
+  { x: 15, y: 12, w: 7, h: 6,  name: "Bad" },
+  { x: 22, y: 12, w: 7, h: 13, name: "Arbeitszimmer" },
+  { x: 15, y: 18, w: 7, h: 7,  name: "Ankleide" },
+];
+
+// Doors: openings on walls (line segments in cell coords).
+// Each: {x1,y1,x2,y2} along an axis-aligned wall.
+const doors = [
+  { x1: 17, y1: 6, x2: 17, y2: 8 },     // Wohnzimmer ↔ Küche
+  { x1: 8, y1: 12, x2: 10, y2: 12 },    // Wohnzimmer ↔ Schlafzimmer
+  { x1: 17, y1: 12, x2: 19, y2: 12 },   // Diele ↔ Bad
+  { x1: 22, y1: 14, x2: 22, y2: 16 },   // Bad ↔ Arbeitszimmer
+  { x1: 15, y1: 20, x2: 15, y2: 22 },   // Schlafzimmer ↔ Ankleide
+  { x1: 25, y1: 8, x2: 27, y2: 8 },     // Diele entry (Wohnungstür)
+];
+
+// Windows: along outer walls, drawn as light rectangles
+const windows = [
+  { x1: 3, y1: 1, x2: 7, y2: 1 },
+  { x1: 10, y1: 1, x2: 14, y2: 1 },
+  { x1: 20, y1: 1, x2: 25, y2: 1 },
+  { x1: 1, y1: 16, x2: 1, y2: 20 },
+  { x1: 4, y1: 25, x2: 9, y2: 25 },
+  { x1: 24, y1: 25, x2: 28, y2: 25 },
+];
+
+// Door swing zones (clearance) — rectangles in cell coords where furniture must NOT overlap
+const clearances = doors.map(d => {
+  const horizontal = d.y1 === d.y2;
+  if (horizontal) {
+    return { x: d.x1, y: d.y1 - 2, w: d.x2 - d.x1, h: 4 };
+  } else {
+    return { x: d.x1 - 2, y: d.y1, w: 4, h: d.y2 - d.y1 };
+  }
+});
+
+// ---------- Furniture ----------
+// w/h in cells, room is the preferred room (validation), color
+const furnitureDefs = [
+  { id: "bett",     name: "Doppelbett",   w: 8, h: 7, room: "Schlafzimmer", color: "#6b8aad", accent:"#a9c1dc" },
+  { id: "sofa",     name: "Sofa",         w: 9, h: 4, room: "Wohnzimmer",   color: "#8a6f4d", accent:"#c4a47b" },
+  { id: "tv",       name: "TV-Schrank",   w: 7, h: 2, room: "Wohnzimmer",   color: "#3d3d44", accent:"#7a7a82" },
+  { id: "esstisch", name: "Esstisch",     w: 6, h: 4, room: "Wohnzimmer",   color: "#735239", accent:"#b88860" },
+  { id: "kueche",   name: "Küchenzeile",  w: 10, h: 2, room: "Küche",       color: "#4a5060", accent:"#7c8497" },
+  { id: "kuehl",    name: "Kühlschrank",  w: 2, h: 2, room: "Küche",        color: "#cfd6df", accent:"#eaeef3" },
+  { id: "schrank",  name: "Kleiderschrank", w: 7, h: 2, room: "Ankleide",   color: "#5a4632", accent:"#8b6e51" },
+  { id: "schreib",  name: "Schreibtisch", w: 6, h: 3, room: "Arbeitszimmer",color: "#3a4a5a", accent:"#6b8195" },
+  { id: "regal",    name: "Bücherregal",  w: 6, h: 1, room: "Arbeitszimmer",color: "#5b3b2a", accent:"#8a5e44" },
+  { id: "wanne",    name: "Badewanne",    w: 5, h: 3, room: "Bad",          color: "#dde7ee", accent:"#ffffff" },
+  { id: "wc",       name: "WC + Waschb.", w: 3, h: 2, room: "Bad",          color: "#e8edf1", accent:"#ffffff" },
+  { id: "teppich",  name: "Teppich",      w: 7, h: 5, room: "Wohnzimmer",   color: "#a85b3d", accent:"#d68b6a", isRug: true },
+];
+
+// ---------- State ----------
+const placed = []; // {def, x, y, rot} rot in 0|1 (0=as-is, 1=swap w/h)
+let dragging = null; // { def, x, y, rot, fromIndex } floating piece
+let hoverCell = null;
+
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  // maintain aspect by pillarboxing inside
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  draw();
+}
+window.addEventListener("resize", resize);
+
+// scale: cell px so the COLSxROWS fits the canvas
+function metrics() {
+  const W = canvas.width, H = canvas.height;
+  const cell = Math.min(W / COLS, H / ROWS);
+  const ox = (W - cell * COLS) / 2;
+  const oy = (H - cell * ROWS) / 2;
+  return { W, H, cell, ox, oy };
+}
+
+// ---------- Drawing ----------
+function draw() {
+  const { W, H, cell, ox, oy } = metrics();
+  ctx.clearRect(0, 0, W, H);
+
+  // backdrop subtle
+  const grd = ctx.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, "#1a2030");
+  grd.addColorStop(1, "#10141d");
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+
+  // floor base
+  ctx.save();
+  ctx.translate(ox, oy);
+
+  // outer apartment shadow
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fillRect(-12, -12, COLS * cell + 24, ROWS * cell + 24);
+
+  // floor (parquet)
+  drawFloor(cell);
+
+  // rugs first (under furniture)
+  for (const p of placed) if (p.def.isRug) drawFurniture(p, cell);
+
+  // rooms outlines + labels
+  drawRoomLabels(cell);
+
+  // windows (under walls)
+  drawWindows(cell);
+
+  // walls
+  drawWalls(cell);
+
+  // doors (gaps + arc)
+  drawDoors(cell);
+
+  // furniture (non-rug)
+  for (const p of placed) if (!p.def.isRug) drawFurniture(p, cell);
+
+  // hover/dragging ghost
+  if (dragging && hoverCell) {
+    const ghost = { ...dragging, x: hoverCell.x, y: hoverCell.y };
+    const ok = isValidPlacement(ghost);
+    drawGhost(ghost, cell, ok);
+  }
+
+  ctx.restore();
+
+  updateHud();
+}
+
+function drawFloor(cell) {
+  // parquet planks aligned to grid
+  const W = COLS * cell, H = ROWS * cell;
+  ctx.fillStyle = "#e9d8b8";
+  ctx.fillRect(0, 0, W, H);
+
+  const plankH = cell * 1.0;
+  const plankW = cell * 4;
+  ctx.save();
+  ctx.globalAlpha = 0.65;
+  for (let row = 0; row < ROWS; row++) {
+    const y = row * plankH;
+    const offset = (row % 2) * (plankW / 2);
+    for (let x = -plankW; x < W + plankW; x += plankW) {
+      const px = x + offset;
+      const shade = 230 + ((row * 13 + Math.floor(px)) % 18) - 9;
+      ctx.fillStyle = `rgb(${shade-10}, ${shade-22}, ${shade-46})`;
+      ctx.fillRect(px, y, plankW - 1, plankH - 1);
+    }
+  }
+  // grain lines
+  ctx.globalAlpha = 0.08;
+  ctx.strokeStyle = "#5a4426";
+  ctx.lineWidth = 0.6;
+  for (let row = 0; row < ROWS; row++) {
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      const yy = row * plankH + (i + 1) * plankH / 4 + (Math.sin(row * i) * 1.2);
+      ctx.moveTo(0, yy);
+      ctx.lineTo(W, yy);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // grid (very subtle)
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= COLS; x++) {
+    ctx.beginPath(); ctx.moveTo(x*cell, 0); ctx.lineTo(x*cell, ROWS*cell); ctx.stroke();
+  }
+  for (let y = 0; y <= ROWS; y++) {
+    ctx.beginPath(); ctx.moveTo(0, y*cell); ctx.lineTo(COLS*cell, y*cell); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRoomLabels(cell) {
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const r of rooms) {
+    // skip label if non-rug furniture covers the room's center band
+    const labelRect = { x: r.x + r.w/2 - 2.5, y: r.y + r.h/2 - 1, w: 5, h: 2.5 };
+    let occluded = false;
+    for (const p of placed) {
+      if (p.def.isRug) continue;
+      if (rectsOverlap(labelRect, pieceRect(p))) { occluded = true; break; }
+    }
+    if (occluded) continue;
+    const cx = (r.x + r.w/2) * cell;
+    const cy = (r.y + r.h/2) * cell;
+    const m2 = ((r.w * r.h) * 0.0625).toFixed(1);
+    ctx.font = `${Math.max(11, cell*0.7)}px Inter, system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(40,30,15,0.35)";
+    ctx.fillText(r.name.toUpperCase(), cx, cy - 6);
+    ctx.font = `${Math.max(9, cell*0.5)}px Inter, system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(40,30,15,0.25)";
+    ctx.fillText(`${m2} m²`, cx, cy + cell*0.7);
+  }
+  ctx.restore();
+}
+
+function wallSegments() {
+  // outer rect
+  const segs = [];
+  const outer = { x:0, y:0, w:COLS, h:ROWS };
+  segs.push({x1:outer.x, y1:outer.y, x2:outer.x+outer.w, y2:outer.y});
+  segs.push({x1:outer.x+outer.w, y1:outer.y, x2:outer.x+outer.w, y2:outer.y+outer.h});
+  segs.push({x1:outer.x, y1:outer.y+outer.h, x2:outer.x+outer.w, y2:outer.y+outer.h});
+  segs.push({x1:outer.x, y1:outer.y, x2:outer.x, y2:outer.y+outer.h});
+  // inner walls between rooms (deduped)
+  // simple: draw each room's edges; overlaps don't hurt since we render walls thick
+  for (const r of rooms) {
+    segs.push({x1:r.x, y1:r.y, x2:r.x+r.w, y2:r.y});
+    segs.push({x1:r.x+r.w, y1:r.y, x2:r.x+r.w, y2:r.y+r.h});
+    segs.push({x1:r.x, y1:r.y+r.h, x2:r.x+r.w, y2:r.y+r.h});
+    segs.push({x1:r.x, y1:r.y, x2:r.x, y2:r.y+r.h});
+  }
+  return segs;
+}
+
+function drawWalls(cell) {
+  const segs = wallSegments();
+  const wallThickness = Math.max(3, cell * 0.35);
+  // build a binary mask of wall pixels then carve doors and windows
+  // simpler approach: draw walls, then draw doors/windows over them
+  ctx.save();
+  ctx.strokeStyle = "#2a2014";
+  ctx.lineWidth = wallThickness;
+  ctx.lineCap = "square";
+  for (const s of segs) {
+    ctx.beginPath();
+    ctx.moveTo(s.x1*cell, s.y1*cell);
+    ctx.lineTo(s.x2*cell, s.y2*cell);
+    ctx.stroke();
+  }
+  // inner highlight
+  ctx.strokeStyle = "rgba(255,225,180,0.08)";
+  ctx.lineWidth = wallThickness * 0.4;
+  for (const s of segs) {
+    ctx.beginPath();
+    ctx.moveTo(s.x1*cell, s.y1*cell);
+    ctx.lineTo(s.x2*cell, s.y2*cell);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDoors(cell) {
+  const wallThickness = Math.max(3, cell * 0.35);
+  ctx.save();
+  for (const d of doors) {
+    // erase wall segment
+    ctx.save();
+    ctx.strokeStyle = "#e9d8b8";
+    ctx.lineWidth = wallThickness + 2;
+    ctx.beginPath();
+    ctx.moveTo(d.x1*cell, d.y1*cell);
+    ctx.lineTo(d.x2*cell, d.y2*cell);
+    ctx.stroke();
+    ctx.restore();
+    // draw door swing arc
+    const horizontal = d.y1 === d.y2;
+    const len = horizontal ? Math.abs(d.x2-d.x1)*cell : Math.abs(d.y2-d.y1)*cell;
+    const cx = horizontal ? d.x1*cell : d.x1*cell;
+    const cy = horizontal ? d.y1*cell : d.y1*cell;
+    ctx.save();
+    ctx.strokeStyle = "rgba(40,25,10,0.35)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    if (horizontal) {
+      ctx.arc(cx, cy, len, 0, Math.PI/2);
+    } else {
+      ctx.arc(cx, cy, len, -Math.PI/2, 0);
+    }
+    ctx.stroke();
+    // door panel
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "#5a3a1a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    if (horizontal) ctx.lineTo(cx + len, cy);
+    else ctx.lineTo(cx, cy + len);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawWindows(cell) {
+  const wallThickness = Math.max(3, cell * 0.35);
+  ctx.save();
+  for (const w of windows) {
+    ctx.strokeStyle = "#e9d8b8";
+    ctx.lineWidth = wallThickness + 2;
+    ctx.beginPath();
+    ctx.moveTo(w.x1*cell, w.y1*cell); ctx.lineTo(w.x2*cell, w.y2*cell);
+    ctx.stroke();
+    // window panes
+    ctx.strokeStyle = "#9bb8d4";
+    ctx.lineWidth = wallThickness * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(w.x1*cell, w.y1*cell); ctx.lineTo(w.x2*cell, w.y2*cell);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(w.x1*cell, w.y1*cell); ctx.lineTo(w.x2*cell, w.y2*cell);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function getDims(p) {
+  return p.rot ? { w: p.def.h, h: p.def.w } : { w: p.def.w, h: p.def.h };
+}
+
+function drawFurniture(p, cell, alpha=1) {
+  const { w, h } = getDims(p);
+  const x = p.x * cell, y = p.y * cell;
+  const W = w * cell, H = h * cell;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  if (p.def.isRug) {
+    // rug
+    ctx.fillStyle = p.def.color;
+    roundRect(ctx, x+2, y+2, W-4, H-4, cell*0.2);
+    ctx.fill();
+    // pattern
+    ctx.strokeStyle = p.def.accent;
+    ctx.lineWidth = 1.5;
+    for (let i=1; i<3; i++) {
+      ctx.beginPath();
+      roundRect(ctx, x+2+i*4, y+2+i*4, W-4-i*8, H-4-i*8, cell*0.15);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  roundRect(ctx, x+3, y+5, W, H, cell*0.15);
+  ctx.fill();
+
+  // base
+  const grd = ctx.createLinearGradient(x, y, x, y+H);
+  grd.addColorStop(0, p.def.accent);
+  grd.addColorStop(1, p.def.color);
+  ctx.fillStyle = grd;
+  roundRect(ctx, x, y, W, H, cell*0.18);
+  ctx.fill();
+
+  // border
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // detail per furniture
+  drawFurnitureDetails(p, x, y, W, H, cell);
+
+  ctx.restore();
+}
+
+function drawFurnitureDetails(p, x, y, W, H, cell) {
+  const id = p.def.id;
+  ctx.save();
+  switch(id) {
+    case "bett": {
+      // pillows
+      ctx.fillStyle = "#fafafa";
+      const pw = W*0.42, ph = H*0.18;
+      const gap = (W - pw*2) / 3;
+      const py = y + cell*0.4;
+      roundRect(ctx, x + gap, py, pw, ph, 4); ctx.fill();
+      roundRect(ctx, x + gap*2 + pw, py, pw, ph, 4); ctx.fill();
+      // blanket fold
+      ctx.strokeStyle = "rgba(255,255,255,0.4)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x+8, y + H*0.45);
+      ctx.lineTo(x+W-8, y + H*0.45);
+      ctx.stroke();
+      break;
+    }
+    case "sofa": {
+      // cushions
+      ctx.fillStyle = p.def.accent;
+      const cw = (W - 16) / 3;
+      for (let i=0; i<3; i++) {
+        roundRect(ctx, x+8+i*cw+2, y+H*0.35, cw-4, H*0.5, 6);
+        ctx.fill();
+      }
+      // arms
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.fillRect(x+2, y+H*0.2, 6, H*0.6);
+      ctx.fillRect(x+W-8, y+H*0.2, 6, H*0.6);
+      break;
+    }
+    case "tv": {
+      ctx.fillStyle = "#0a0a0a";
+      roundRect(ctx, x+W*0.15, y+H*0.2, W*0.7, H*0.55, 3);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.strokeRect(x+W*0.15, y+H*0.2, W*0.7, H*0.55);
+      break;
+    }
+    case "esstisch": {
+      ctx.fillStyle = "rgba(255,255,255,0.1)";
+      roundRect(ctx, x+6, y+6, W-12, H-12, 4);
+      ctx.fill();
+      // chairs as small dots around
+      ctx.fillStyle = "rgba(40,30,15,0.5)";
+      for (const [cx, cy] of [[x+W*0.25,y-cell*0.3],[x+W*0.75,y-cell*0.3],[x+W*0.25,y+H+cell*0.3],[x+W*0.75,y+H+cell*0.3]]) {
+        ctx.beginPath(); ctx.arc(cx, cy, cell*0.35, 0, Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case "kueche": {
+      // segmented counter
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.lineWidth = 1;
+      const segs = Math.floor(W / cell);
+      for (let i=1; i<segs; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + i*cell, y+2);
+        ctx.lineTo(x + i*cell, y+H-2);
+        ctx.stroke();
+      }
+      // sink
+      ctx.fillStyle = "#222";
+      roundRect(ctx, x+W*0.3, y+H*0.2, W*0.18, H*0.6, 3);
+      ctx.fill();
+      // hob
+      ctx.fillStyle = "#111";
+      roundRect(ctx, x+W*0.6, y+H*0.2, W*0.2, H*0.6, 3);
+      ctx.fill();
+      break;
+    }
+    case "kuehl": {
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath(); ctx.moveTo(x, y+H*0.4); ctx.lineTo(x+W, y+H*0.4); ctx.stroke();
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.fillRect(x+W-6, y+H*0.15, 2, H*0.15);
+      ctx.fillRect(x+W-6, y+H*0.55, 2, H*0.2);
+      break;
+    }
+    case "schrank": {
+      // doors
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      const segs = Math.floor(W / (cell*1.5));
+      for (let i=1; i<segs; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + i*W/segs, y+2);
+        ctx.lineTo(x + i*W/segs, y+H-2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      for (let i=0; i<segs; i++) {
+        ctx.beginPath();
+        ctx.arc(x + (i+0.5)*W/segs, y+H*0.5, 1.5, 0, Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case "schreib": {
+      ctx.fillStyle = "#1a1a1a";
+      roundRect(ctx, x+W*0.55, y+H*0.2, W*0.35, H*0.55, 3); ctx.fill();
+      ctx.fillStyle = "#333";
+      roundRect(ctx, x+W*0.1, y+H*0.65, W*0.25, H*0.2, 2); ctx.fill();
+      break;
+    }
+    case "regal": {
+      ctx.fillStyle = p.def.accent;
+      const segs = Math.max(3, Math.floor(W/cell));
+      for (let i=0; i<segs; i++) {
+        const bw = cell*0.6, bh = H*0.6;
+        ctx.fillStyle = `hsl(${(i*47)%360}, 35%, 45%)`;
+        ctx.fillRect(x + i*W/segs + 3, y+H*0.2, bw*0.35, bh);
+      }
+      break;
+    }
+    case "wanne": {
+      ctx.fillStyle = "#b8d8e5";
+      roundRect(ctx, x+5, y+5, W-10, H-10, cell*0.4);
+      ctx.fill();
+      ctx.strokeStyle = "#7a9faf";
+      ctx.stroke();
+      break;
+    }
+    case "wc": {
+      // toilet circle + sink rect
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(x+W*0.25, y+H*0.5, Math.min(W,H)*0.3, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = "#aaa"; ctx.stroke();
+      roundRect(ctx, x+W*0.55, y+H*0.2, W*0.4, H*0.6, 4); ctx.fill(); ctx.stroke();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawGhost(p, cell, ok) {
+  const { w, h } = getDims(p);
+  const x = p.x * cell, y = p.y * cell;
+  const W = w * cell, H = h * cell;
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  drawFurniture(p, cell, 0.85);
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = ok ? "rgba(110,231,183,0.95)" : "rgba(251,113,133,0.95)";
+  ctx.setLineDash(ok ? [] : [6,4]);
+  roundRect(ctx, x+1, y+1, W-2, H-2, cell*0.18);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// ---------- Validation ----------
+function rectsOverlap(a, b) {
+  return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+}
+
+function isInsideApartment(rect) {
+  return rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= COLS && rect.y + rect.h <= ROWS;
+}
+
+function isInsideAnyRoom(rect) {
+  // every cell of the rect must lie inside one of the rooms
+  for (let cy = rect.y; cy < rect.y + rect.h; cy++) {
+    for (let cx = rect.x; cx < rect.x + rect.w; cx++) {
+      let inside = false;
+      for (const r of rooms) {
+        if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) { inside = true; break; }
+      }
+      if (!inside) return false;
+    }
+  }
+  return true;
+}
+
+function pieceRect(p) {
+  const { w, h } = getDims(p);
+  return { x: p.x, y: p.y, w, h };
+}
+
+function isValidPlacement(p, ignoreIndex = -1) {
+  const rect = pieceRect(p);
+  if (!isInsideApartment(rect)) return false;
+  if (!isInsideAnyRoom(rect)) return false;
+  // door clearances
+  for (const cz of clearances) {
+    if (rectsOverlap(rect, cz)) return false;
+  }
+  // overlap with other furniture (excluding rugs both ways)
+  for (let i = 0; i < placed.length; i++) {
+    if (i === ignoreIndex) continue;
+    const o = placed[i];
+    if (o.def.isRug || p.def.isRug) continue; // rugs can overlap
+    if (rectsOverlap(rect, pieceRect(o))) return false;
+  }
+  return true;
+}
+
+// ---------- Interaction ----------
+function eventCell(ev) {
+  const rect = canvas.getBoundingClientRect();
+  const px = (ev.clientX - rect.left) * dpr;
+  const py = (ev.clientY - rect.top) * dpr;
+  const { cell, ox, oy } = metrics();
+  const cx = (px - ox) / cell;
+  const cy = (py - oy) / cell;
+  return { cx, cy };
+}
+
+function startDragFromTray(defId, ev) {
+  const def = furnitureDefs.find(d => d.id === defId);
+  if (!def) return;
+  if (placed.some(p => p.def.id === defId)) return;
+  dragging = { def, x: 0, y: 0, rot: 0, fromIndex: -1 };
+  canvas.classList.add("dragging");
+  updateHover(ev);
+}
+
+function startDragFromBoard(index, ev) {
+  const p = placed[index];
+  dragging = { def: p.def, x: p.x, y: p.y, rot: p.rot, fromIndex: index };
+  // remove temporarily
+  placed.splice(index, 1);
+  canvas.classList.add("dragging");
+  updateHover(ev);
+  refreshTray();
+}
+
+function updateHover(ev) {
+  if (!dragging) return;
+  const { cx, cy } = eventCell(ev);
+  const { w, h } = getDims(dragging);
+  hoverCell = {
+    x: Math.round(cx - w/2),
+    y: Math.round(cy - h/2),
+  };
+  dragging.x = hoverCell.x;
+  dragging.y = hoverCell.y;
+  draw();
+}
+
+function dropDrag() {
+  if (!dragging) return;
+  const ok = isValidPlacement(dragging);
+  if (ok) {
+    placed.push({ def: dragging.def, x: dragging.x, y: dragging.y, rot: dragging.rot });
+    flash("Platziert: " + dragging.def.name, "good");
+  } else {
+    flash("Geht nicht hier hin", "bad");
+    if (dragging.fromIndex >= 0) {
+      // restore original
+      placed.push({ def: dragging.def, x: dragging.x, y: dragging.y, rot: dragging.rot });
+    }
+  }
+  dragging = null;
+  hoverCell = null;
+  canvas.classList.remove("dragging");
+  refreshTray();
+  draw();
+}
+
+function cancelDrag() {
+  if (!dragging) return;
+  if (dragging.fromIndex >= 0) {
+    placed.push({ def: dragging.def, x: dragging.x, y: dragging.y, rot: dragging.rot });
+  }
+  dragging = null; hoverCell = null;
+  canvas.classList.remove("dragging");
+  refreshTray();
+  draw();
+}
+
+canvas.addEventListener("mousemove", (ev) => {
+  if (dragging) updateHover(ev);
+});
+canvas.addEventListener("mousedown", (ev) => {
+  if (dragging) { dropDrag(); return; }
+  const { cx, cy } = eventCell(ev);
+  // pick up topmost piece under cursor
+  for (let i = placed.length - 1; i >= 0; i--) {
+    const r = pieceRect(placed[i]);
+    if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) {
+      startDragFromBoard(i, ev);
+      return;
+    }
+  }
+});
+canvas.addEventListener("dblclick", (ev) => {
+  const { cx, cy } = eventCell(ev);
+  for (let i = placed.length - 1; i >= 0; i--) {
+    const r = pieceRect(placed[i]);
+    if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) {
+      flash("Entfernt: " + placed[i].def.name, "bad");
+      placed.splice(i, 1);
+      refreshTray();
+      draw();
+      return;
+    }
+  }
+});
+
+window.addEventListener("keydown", (ev) => {
+  if (ev.key === "r" || ev.key === "R") {
+    if (dragging) {
+      dragging.rot = dragging.rot ? 0 : 1;
+      // re-center on hover
+      if (hoverCell) {
+        const { w, h } = getDims(dragging);
+        // best effort recenter
+        dragging.x = hoverCell.x - Math.floor((w - h) / 2);
+        dragging.y = hoverCell.y - Math.floor((h - w) / 2);
+      }
+      draw();
+    }
+  } else if (ev.key === "Escape") {
+    cancelDrag();
+  } else if (ev.key === "Delete" || ev.key === "Backspace") {
+    if (dragging && dragging.fromIndex >= 0) {
+      flash("Entfernt: " + dragging.def.name, "bad");
+      dragging = null; hoverCell = null;
+      canvas.classList.remove("dragging");
+      refreshTray(); draw();
+    }
+  }
+});
+
+// ---------- Tray ----------
+function refreshTray() {
+  const tray = document.getElementById("tray");
+  tray.innerHTML = "";
+  for (const def of furnitureDefs) {
+    const isPlaced = placed.some(p => p.def.id === def.id);
+    const el = document.createElement("div");
+    el.className = "piece" + (isPlaced ? " placed" : "");
+    el.innerHTML = `
+      <div class="name">${def.name}</div>
+      <div class="dim">${(def.w*0.25).toFixed(2)} × ${(def.h*0.25).toFixed(2)} m · ${def.room}</div>
+      <div class="thumb"><canvas></canvas></div>
+    `;
+    const thumb = el.querySelector("canvas");
+    drawThumb(thumb, def);
+    el.addEventListener("mousedown", (ev) => {
+      if (isPlaced) return;
+      ev.preventDefault();
+      startDragFromTray(def.id, ev);
+    });
+    tray.appendChild(el);
+  }
+}
+
+function drawThumb(c, def) {
+  const w = c.clientWidth || 120, h = c.clientHeight || 56;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d");
+  g.scale(dpr, dpr);
+  g.fillStyle = "#e9d8b8"; g.fillRect(0,0,w,h);
+  // miniature furniture
+  const cell = Math.min(w / (def.w + 2), h / (def.h + 2));
+  const ox = (w - def.w * cell) / 2;
+  const oy = (h - def.h * cell) / 2;
+  // shadow
+  g.fillStyle = "rgba(0,0,0,0.2)";
+  g.fillRect(ox+2, oy+3, def.w*cell, def.h*cell);
+  // body
+  const grd = g.createLinearGradient(0, oy, 0, oy + def.h*cell);
+  grd.addColorStop(0, def.accent); grd.addColorStop(1, def.color);
+  g.fillStyle = grd;
+  g.fillRect(ox, oy, def.w*cell, def.h*cell);
+  g.strokeStyle = "rgba(0,0,0,0.3)"; g.strokeRect(ox, oy, def.w*cell, def.h*cell);
+}
+
+// ---------- HUD / Scoring ----------
+function computeStats() {
+  // total room area
+  const totalCells = rooms.reduce((s,r) => s + r.w*r.h, 0);
+  let usedCells = 0;
+  for (const p of placed) {
+    if (p.def.isRug) continue;
+    const r = pieceRect(p);
+    usedCells += r.w * r.h;
+  }
+  const coverage = Math.min(1, usedCells / totalCells);
+  // clashes: door clearance violations + wrong-room placements
+  let clashes = 0;
+  for (const p of placed) {
+    if (p.def.isRug) continue;
+    const r = pieceRect(p);
+    for (const cz of clearances) if (rectsOverlap(r, cz)) clashes++;
+    // wrong room?
+    const center = { cx: r.x + r.w/2, cy: r.y + r.h/2 };
+    const room = rooms.find(rm => center.cx >= rm.x && center.cx < rm.x+rm.w && center.cy >= rm.y && center.cy < rm.y+rm.h);
+    if (!room || room.name !== p.def.room) clashes++;
+  }
+  const placedNonRug = placed.filter(p=>!p.def.isRug).length;
+  const score = Math.max(0, Math.round(coverage * 1000 + placedNonRug * 50 - clashes * 80));
+  return { coverage, clashes, score, placedNonRug };
+}
+
+function updateHud() {
+  const s = computeStats();
+  document.getElementById("hud-cov").textContent = (s.coverage*100).toFixed(0) + "%";
+  document.getElementById("hud-clash").textContent = s.clashes;
+  document.getElementById("hud-score").textContent = s.score;
+  const cs = document.getElementById("hud-clash-stat");
+  cs.classList.toggle("bad", s.clashes > 0);
+  cs.classList.toggle("good", s.clashes === 0);
+}
+
+// ---------- Toast ----------
+let toastTimer;
+function flash(msg, kind="good") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show " + kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove("show"); }, 1300);
+}
+
+// ---------- Buttons ----------
+document.getElementById("btn-reset").addEventListener("click", () => {
+  placed.length = 0;
+  dragging = null; hoverCell = null;
+  refreshTray(); draw();
+  flash("Wohnung geräumt", "good");
+});
+document.getElementById("btn-finish").addEventListener("click", () => {
+  const s = computeStats();
+  document.getElementById("mo-cov").textContent = (s.coverage*100).toFixed(0)+"%";
+  document.getElementById("mo-clash").textContent = s.clashes;
+  document.getElementById("mo-score").textContent = s.score;
+  let title = "Solide eingerichtet";
+  let body = "Nicht schlecht.";
+  if (s.score > 850 && s.clashes === 0) { title = "Architekt!"; body = "Jede Tür schwingt frei, jeder Raum stimmt. Magazinwürdig."; }
+  else if (s.clashes > 3) { title = "Da steht einiges im Weg"; body = "Schau auf Türfreiräume und ob alles im richtigen Raum landet."; }
+  else if (s.coverage < 0.2) { title = "Etwas leer"; body = "Mehr Möbel rein — die Wohnung wirkt unbewohnt."; }
+  else if (s.score > 600) { title = "Gemütlich"; body = "Schöne Aufteilung. Da würde man gerne wohnen."; }
+  document.getElementById("mo-title").textContent = title;
+  document.getElementById("mo-body").textContent = body;
+  document.getElementById("overlay").classList.add("show");
+});
+document.getElementById("mo-again").addEventListener("click", () => {
+  document.getElementById("overlay").classList.remove("show");
+  placed.length = 0; refreshTray(); draw();
+});
+
+// ---------- Tutorial ----------
+const tutSteps = [
+  {
+    title: "Willkommen im Altbau",
+    text: "Das ist deine Wohnung — sieben Räume, 78 m². Parkett, Türen, Fenster. Wir möblieren sie gemeinsam, Schritt für Schritt.",
+    target: { kind: "el", sel: "#board" },
+    bubble: "left",
+    advance: "next",
+  },
+  {
+    title: "Ein Möbelstück greifen",
+    text: "Klicke das Doppelbett aus der Möbelliste an und ziehe es auf den Grundriss. Übrigens: Im Untertitel steht der passende Raum.",
+    target: { kind: "piece", id: "bett" },
+    bubble: "left",
+    advance: { event: "pickup", id: "bett" },
+    hint: "Klick aufs Doppelbett und zieh die Maus auf den Grundriss.",
+  },
+  {
+    title: "Im richtigen Raum ablegen",
+    text: "Lass das Bett im Schlafzimmer fallen (links unten). Wenn der Rahmen grün leuchtet, passt es — Maustaste loslassen.",
+    target: { kind: "room", name: "Schlafzimmer" },
+    bubble: "right",
+    advance: { event: "placed", id: "bett" },
+    hint: "Bett ins Schlafzimmer ziehen und Maustaste lösen.",
+  },
+  {
+    title: "Drehen mit R",
+    text: "Beim Ziehen kannst du mit der Taste R rotieren. Schnapp dir das Sofa, dreh es nach Geschmack und stell es ins Wohnzimmer.",
+    target: { kind: "piece", id: "sofa" },
+    bubble: "left",
+    advance: { event: "placed", id: "sofa" },
+    hint: "Sofa ziehen, R drücken, im Wohnzimmer ablegen.",
+  },
+  {
+    title: "Türen freihalten",
+    text: "Die gestrichelten Bögen sind Türschwünge. Wer sie blockiert, fängt sich Konflikte ein — die kosten Punkte. Behalte den Konflikte-Zähler im Auge.",
+    target: { kind: "el", sel: "#hud-clash-stat" },
+    bubble: "bottom",
+    advance: "next",
+  },
+  {
+    title: "Bewerten lassen",
+    text: "Stell den Rest nach Lust und Laune. Wenn du fertig bist: 'Fertig — Bewerten'. Coverage + Möbelzahl − Konflikte ergeben deinen Score. Viel Erfolg!",
+    target: { kind: "el", sel: "#btn-finish" },
+    bubble: "top",
+    advance: "next",
+    finalLabel: "Los geht's",
+  },
+];
+
+const tut = {
+  active: false,
+  step: 0,
+  start() {
+    this.active = true;
+    this.step = 0;
+    document.getElementById("tut-overlay").classList.add("show");
+    this.render();
+    window.addEventListener("resize", this._onResize = () => this.render());
+  },
+  end() {
+    this.active = false;
+    document.getElementById("tut-overlay").classList.remove("show");
+    if (this._onResize) window.removeEventListener("resize", this._onResize);
+    flash("Bühne frei — viel Spaß!", "good");
+  },
+  next() {
+    if (!this.active) return;
+    if (this.step >= tutSteps.length - 1) { this.end(); return; }
+    this.step++;
+    this.render();
+  },
+  notify(event, payload) {
+    if (!this.active) return;
+    const s = tutSteps[this.step];
+    if (s.advance && typeof s.advance === "object"
+        && s.advance.event === event
+        && s.advance.id === payload) {
+      this.next();
+    }
+  },
+  render() {
+    const s = tutSteps[this.step];
+    document.getElementById("tut-step").textContent = `Schritt ${this.step+1} / ${tutSteps.length}`;
+    document.getElementById("tut-title").textContent = s.title;
+    document.getElementById("tut-text").textContent = s.text;
+    const hint = document.getElementById("tut-hint");
+    if (s.hint) { hint.style.display = "flex"; hint.textContent = s.hint; }
+    else { hint.style.display = "none"; }
+    const nextBtn = document.getElementById("tut-next");
+    if (s.advance === "next") {
+      nextBtn.style.display = "";
+      nextBtn.textContent = s.finalLabel || "Weiter";
+    } else {
+      nextBtn.style.display = "none";
+    }
+    // dots
+    const dots = document.getElementById("tut-dots");
+    dots.innerHTML = "";
+    for (let i=0; i<tutSteps.length; i++) {
+      const d = document.createElement("div");
+      d.className = "dot" + (i < this.step ? " done" : i === this.step ? " active" : "");
+      dots.appendChild(d);
+    }
+    // position spotlight + bubble
+    const rect = this.targetRect(s.target);
+    this.placeSpot(rect, s.bubble);
+  },
+  targetRect(t) {
+    if (t.kind === "el") {
+      const el = document.querySelector(t.sel);
+      if (!el) return null;
+      return el.getBoundingClientRect();
+    }
+    if (t.kind === "piece") {
+      const tray = document.getElementById("tray");
+      const idx = furnitureDefs.findIndex(d => d.id === t.id);
+      const el = tray.children[idx];
+      return el ? el.getBoundingClientRect() : null;
+    }
+    if (t.kind === "room") {
+      const room = rooms.find(r => r.name === t.name);
+      if (!room) return null;
+      const cRect = canvas.getBoundingClientRect();
+      const { cell, ox, oy } = metrics();
+      const left = cRect.left + (ox + room.x * cell) / dpr;
+      const top  = cRect.top  + (oy + room.y * cell) / dpr;
+      const w = (room.w * cell) / dpr;
+      const h = (room.h * cell) / dpr;
+      return { left, top, width: w, height: h, right: left+w, bottom: top+h };
+    }
+    return null;
+  },
+  placeSpot(rect, bubblePos) {
+    const spot = document.getElementById("tut-spot");
+    const bubble = document.getElementById("tut-bubble");
+    if (!rect) { spot.style.opacity = 0; bubble.style.opacity = 0; return; }
+    const pad = 8;
+    spot.style.opacity = 1;
+    spot.style.left = (rect.left - pad) + "px";
+    spot.style.top  = (rect.top - pad) + "px";
+    spot.style.width  = (rect.width + pad*2) + "px";
+    spot.style.height = (rect.height + pad*2) + "px";
+
+    bubble.style.opacity = 1;
+    bubble.classList.remove("arrow-left","arrow-right","arrow-top","arrow-bottom");
+    const bw = 320, bh = bubble.offsetHeight || 180;
+    let bx, by, arrow;
+    const margin = 22;
+    switch (bubblePos) {
+      case "right":
+        bx = rect.right + margin;
+        by = rect.top + rect.height/2 - bh/2;
+        arrow = "arrow-left";
+        break;
+      case "top":
+        bx = rect.left + rect.width/2 - bw/2;
+        by = rect.top - bh - margin;
+        arrow = "arrow-bottom";
+        break;
+      case "bottom":
+        bx = rect.left + rect.width/2 - bw/2;
+        by = rect.bottom + margin;
+        arrow = "arrow-top";
+        break;
+      case "left":
+      default:
+        bx = rect.left - bw - margin;
+        by = rect.top + rect.height/2 - bh/2;
+        arrow = "arrow-right";
+        break;
+    }
+    // clamp to viewport
+    bx = Math.max(12, Math.min(window.innerWidth - bw - 12, bx));
+    by = Math.max(12, Math.min(window.innerHeight - bh - 12, by));
+    bubble.style.left = bx + "px";
+    bubble.style.top  = by + "px";
+    bubble.classList.add(arrow);
+  },
+};
+
+document.getElementById("tut-next").addEventListener("click", () => tut.next());
+document.getElementById("tut-skip").addEventListener("click", () => tut.end());
+document.getElementById("btn-tutorial").addEventListener("click", () => tut.start());
+
+// Welcome modal (first visit)
+const welcome = document.getElementById("welcome-overlay");
+function showWelcome() { welcome.classList.add("show"); }
+function hideWelcome() { welcome.classList.remove("show"); }
+document.getElementById("welcome-tutorial").addEventListener("click", () => { hideWelcome(); tut.start(); });
+document.getElementById("welcome-skip").addEventListener("click", () => { hideWelcome(); });
+
+// Hook tutorial events into existing drag flow
+const _origStartTray = startDragFromTray;
+startDragFromTray = function(defId, ev) {
+  _origStartTray(defId, ev);
+  tut.notify("pickup", defId);
+};
+const _origDrop = dropDrag;
+dropDrag = function() {
+  const wasDragging = dragging;
+  const willPlace = wasDragging && isValidPlacement(wasDragging);
+  _origDrop();
+  if (willPlace && wasDragging) tut.notify("placed", wasDragging.def.id);
+};
+
+// Re-render tutorial spotlight when window resizes (hook into existing resize)
+const _origResize = resize;
+resize = function() {
+  _origResize();
+  if (tut.active) tut.render();
+};
+window.removeEventListener("resize", _origResize);
+window.addEventListener("resize", resize);
+
+// ---------- Boot ----------
+refreshTray();
+requestAnimationFrame(() => {
+  resize();
+  // First visit: show welcome
+  if (!localStorage.getItem("grundriss_tetris_seen")) {
+    localStorage.setItem("grundriss_tetris_seen", "1");
+    showWelcome();
+  }
+});
+</script>
+</body>
+</html>
